@@ -16,9 +16,32 @@ A Python script that scrapes migration data from the [BirdCast dashboard](https:
 
 ## Installation
 
-1. Clone or download this repository
-2. Install the required dependencies:
+### Development Setup
 
+1. Clone the repository:
+```bash
+git clone https://github.com/david-j-cox/birdcast-migration-scraper.git
+cd birdcast-migration-scraper
+```
+
+2. Create and activate a Python virtual environment:
+```bash
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+3. Install the required dependencies:
+```bash
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+### Production Installation
+
+If you just want to run the scraper without development:
+
+1. Download or clone the repository
+2. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
@@ -100,9 +123,51 @@ Create a plist file for more robust scheduling on macOS.
 - The BirdCast website structure may change, requiring updates to the scraper
 - If running scheduled mode, make sure your computer doesn't go to sleep
 
+## Development Workflow
+
+This project uses a standard Git workflow with two main branches:
+
+- **main**: Stable, production-ready code
+- **dev**: Development branch for new features and changes
+
+### Contributing
+
+1. Make sure you're on the dev branch:
+```bash
+git checkout dev
+git pull origin dev
+```
+
+2. Make your changes and test them:
+```bash
+source venv/bin/activate  # Activate virtual environment
+python birdcast_scraper.py --test
+```
+
+3. Commit and push your changes:
+```bash
+git add .
+git commit -m "Description of your changes"
+git push origin dev
+```
+
+4. When ready for production, merge dev into main via pull request
+
+### Virtual Environment
+
+Always use the virtual environment when developing:
+```bash
+# Activate (do this each time you start working)
+source venv/bin/activate
+
+# Deactivate when done
+deactivate
+```
+
 ## Notes
 
 - The scraper is designed to be respectful of the BirdCast website
 - Data is appended to files, so historical data is preserved
 - The script includes appropriate delays and error handling
 - User-Agent header is set to identify as a standard browser
+- Always work in the virtual environment to avoid dependency conflicts
