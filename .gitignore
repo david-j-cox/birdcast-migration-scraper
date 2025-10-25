@@ -131,6 +131,7 @@ dmypy.json
 # Project specific files
 *.csv
 *.json
+*.parquet
 *.log
 temp_crontab.txt
 
