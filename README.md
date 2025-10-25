@@ -1,18 +1,44 @@
 # BirdCast Data Scraper
 
-A Python script that scrapes migration data from the [BirdCast dashboard](https://dashboard.birdcast.info/region/US-FL-031) for Duval County, Florida and saves it to CSV and JSON files.
+A comprehensive Python scraping system that collects migration data from the [BirdCast dashboard](https://dashboard.birdcast.info/) for counties across major North American bird migration flyways. The system includes scrapers for core counties and all three major flyway corridors (Atlantic, Pacific, and Mississippi).
 
 ## Features
 
-- Scrapes key migration metrics including:
+- **Multi-Flyway Coverage**: Scrapes data from hundreds of counties across all three major North American flyways
+- **Core County Monitoring**: Dedicated scraper for 5 key counties (Florida, Colorado, New Jersey, California, and Alabama)
+- **Comprehensive Data Collection**: Captures key migration metrics including:
   - Total birds count
   - Peak migration traffic (birds in flight, direction, speed, altitude)
   - Migration timing (start/end times)
   - Date information
-- Saves data to both CSV and JSON formats
-- Scheduled daily execution at 12:00 PM (noon)
-- Comprehensive logging
-- Error handling and retry logic
+- **Multiple Output Formats**: Saves data to both CSV and JSON formats
+- **Automated Scheduling**: Daily execution using macOS launchd for reliability
+- **Organized Structure**: Clean separation of scripts, data, logs, and automation files
+- **Comprehensive Logging**: Detailed logging for monitoring and troubleshooting
+- **Error Handling**: Robust retry logic and error recovery
+
+## Project Structure
+
+```
+birdcast-data-grabber/
+├── scripts/                    # All scraper scripts
+│   ├── birdcast_scraper.py    # Core 5-county scraper
+│   ├── atlantic_flyway_scraper.py
+│   ├── pacific_flyway_scraper.py
+│   └── mississippi_flyway_scraper.py
+├── data/                      # All output data files
+│   ├── *.csv                  # CSV output files
+│   ├── *.json                 # JSON output files
+│   └── *_counties_with_urls.csv  # County URL lists
+├── logs/                      # All log files
+│   ├── *.log                  # Scraper logs
+│   └── *_launchd*.log        # Automation logs
+├── automation/                # macOS launchd configuration
+│   ├── *.plist               # Launch daemon files
+│   └── README.md             # Automation documentation
+├── archive_scripts/           # Historical/utility scripts
+└── venv/                     # Python virtual environment
+```
 
 ## Installation
 
@@ -48,39 +74,49 @@ pip install -r requirements.txt
 
 ## Usage
 
-### Test Run (Run Once)
+### Manual Test Runs
 
-To test the scraper and run it once:
-
-```bash
-python birdcast_scraper.py --test
-```
-
-### Scheduled Daily Execution
-
-To run the scraper daily at 12:00 PM (noon):
+To test individual scrapers:
 
 ```bash
-python birdcast_scraper.py --schedule
+# Core 5-county scraper
+python scripts/birdcast_scraper.py --test
+
+# Atlantic Flyway scraper
+python scripts/atlantic_flyway_scraper.py --test
+
+# Pacific Flyway scraper
+python scripts/pacific_flyway_scraper.py --test
+
+# Mississippi Flyway scraper
+python scripts/mississippi_flyway_scraper.py --test
 ```
 
-This will start a persistent process that runs the scraper every day at 12:00 PM (noon). Keep the terminal window open or run it in the background.
+### Automated Daily Execution
 
-### Running in Background (macOS/Linux)
+The system uses macOS launchd for reliable daily automation:
 
-To run the scheduled scraper in the background:
+- **Core Scraper**: 12:00 PM ET daily
+- **Atlantic Flyway**: 12:30 PM ET daily
+- **Pacific Flyway**: 1:00 PM ET daily
+- **Mississippi Flyway**: 1:30 PM ET daily
 
-```bash
-nohup python birdcast_scraper.py --schedule > scraper_output.log 2>&1 &
-```
+See the `automation/README.md` for installation and management instructions.
 
 ## Output Files
 
-The scraper creates several files:
+The system generates organized output files in the `data/` and `logs/` directories:
 
-- `birdcast_data.csv` - CSV file with all scraped data (one row per scrape)
-- `birdcast_data.json` - JSON file with all scraped data (array of objects)
-- `birdcast_scraper.log` - Log file with scraping activity and any errors
+### Data Files (`data/` directory)
+- **Core Counties**: `birdcast_data.csv` and `birdcast_data.json`
+- **Atlantic Flyway**: `atlantic_flyway_corridor.json`
+- **Pacific Flyway**: `pacific_flyway_corridor.json`
+- **Mississippi Flyway**: `mississippi_flyway_corridor.json`
+- **County Lists**: `*_flyway_corridor_counties_with_urls.csv`
+
+### Log Files (`logs/` directory)
+- **Scraper Logs**: `*_scraper.log` files for each scraper
+- **Automation Logs**: `*_launchd.log` and `*_launchd_error.log` files
 
 ## Data Fields
 
@@ -97,31 +133,51 @@ Each scrape captures the following data:
 - `migration_end` - Migration period end time
 - `migration_date` - The date/night of migration
 
-## Automation Options
+## Automation
 
-### Using cron (macOS/Linux)
+The system uses macOS launchd for reliable automation. All automation files are located in the `automation/` directory.
 
-Add to your crontab to run daily at 12:00 PM (noon):
+### Installation
+
+Install all scrapers to run automatically:
 
 ```bash
-crontab -e
+# Install all launchd jobs
+cd automation
+./install_all.sh
+
+# Or install individually
+launchctl load ~/Library/LaunchAgents/com.davidjcox.birdcast-scraper.plist
+launchctl load ~/Library/LaunchAgents/com.davidjcox.atlantic-flyway-scraper.plist
+launchctl load ~/Library/LaunchAgents/com.davidjcox.pacific-flyway-scraper.plist
+launchctl load ~/Library/LaunchAgents/com.davidjcox.mississippi-flyway-scraper.plist
 ```
 
-Add this line (replace with your actual path):
-```
-0 12 * * * cd /Users/yourusername/path/to/birdcast-data-grabber && python3 birdcast_scraper.py --test >> scraper_cron.log 2>&1
+### Management
+
+```bash
+# Check status
+launchctl list | grep -E "(birdcast|atlantic|pacific|mississippi)"
+
+# Uninstall
+cd automation
+./uninstall_all.sh
 ```
 
-### Using launchd (macOS)
-
-Create a plist file for more robust scheduling on macOS.
+For detailed automation documentation, see `automation/README.md`.
 
 ## Troubleshooting
 
-- Check the `birdcast_scraper.log` file for error messages
-- Ensure you have a stable internet connection
-- The BirdCast website structure may change, requiring updates to the scraper
-- If running scheduled mode, make sure your computer doesn't go to sleep
+- **Check Log Files**: All logs are in the `logs/` directory
+  - `*_scraper.log` - Individual scraper logs
+  - `*_launchd.log` - Automation execution logs
+  - `*_launchd_error.log` - Automation error logs
+- **Network Issues**: Ensure stable internet connection
+- **Website Changes**: BirdCast website structure may change, requiring scraper updates
+- **Automation Issues**: 
+  - Check launchd job status: `launchctl list | grep birdcast`
+  - Verify file paths in `.plist` files match your system
+  - Ensure Python virtual environment is properly configured
 
 ## Development Workflow
 
@@ -153,6 +209,17 @@ git push origin dev
 
 4. When ready for production, merge dev into main via pull request
 
+### Testing Changes
+
+Test all scrapers after making changes:
+```bash
+source venv/bin/activate
+python scripts/birdcast_scraper.py --test
+python scripts/atlantic_flyway_scraper.py --test
+python scripts/pacific_flyway_scraper.py --test
+python scripts/mississippi_flyway_scraper.py --test
+```
+
 ### Virtual Environment
 
 Always use the virtual environment when developing:
@@ -164,10 +231,25 @@ source venv/bin/activate
 deactivate
 ```
 
+## System Coverage
+
+### Core Counties (5 counties)
+- **Duval County, FL** - Jacksonville area
+- **Boulder County, CO** - Boulder/Denver area  
+- **Essex County, NJ** - Newark area
+- **Contra Costa County, CA** - San Francisco Bay area
+- **Lee County, AL** - Auburn area
+
+### Flyway Coverage
+- **Atlantic Flyway**: ~200+ counties along the Eastern seaboard
+- **Pacific Flyway**: ~300+ counties along the Western coast and mountain regions
+- **Mississippi Flyway**: ~400+ counties along the central migration corridor
+
 ## Notes
 
-- The scraper is designed to be respectful of the BirdCast website
-- Data is appended to files, so historical data is preserved
-- The script includes appropriate delays and error handling
-- User-Agent header is set to identify as a standard browser
-- Always work in the virtual environment to avoid dependency conflicts
+- **Respectful Scraping**: All scrapers include appropriate delays and respectful request patterns
+- **Data Persistence**: Data is appended to files, preserving historical records
+- **Error Handling**: Comprehensive retry logic and error recovery mechanisms
+- **Browser Simulation**: User-Agent headers simulate standard browser requests
+- **Virtual Environment**: Always use the virtual environment to avoid dependency conflicts
+- **Staggered Execution**: Flyway scrapers run 30 minutes apart to avoid server overload
