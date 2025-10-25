@@ -269,25 +269,50 @@ def save_to_parquet(data_list, filename):
         combined_df = new_df
     
     # Remove duplicates - keep most recent entry per region per day
-    if len(combined_df) > 0 and 'scrape_timestamp' in combined_df.columns and 'region_code' in combined_df.columns:
+    if len(combined_df) > 0 and 'scrape_timestamp' in combined_df.columns:
         # Convert scrape_timestamp to datetime for proper sorting
         combined_df['scrape_timestamp_dt'] = pd.to_datetime(combined_df['scrape_timestamp'])
         
-        # Create date key for deduplication
-        if 'migration_date' in combined_df.columns:
-            combined_df['date_key'] = combined_df['migration_date']
+        # Create comprehensive deduplication key
+        dedup_columns = ['scrape_timestamp_dt']
+        
+        # Add region_code if available
+        if 'region_code' in combined_df.columns:
+            dedup_columns.append('region_code')
+        elif 'url' in combined_df.columns:
+            # Fallback to URL if region_code is missing
+            dedup_columns.append('url')
+        
+        # Create date key for deduplication (prefer migration_date, fallback to scrape date)
+        if 'migration_date' in combined_df.columns and combined_df['migration_date'].notna().any():
+            combined_df['date_key'] = combined_df['migration_date'].fillna(
+                combined_df['scrape_timestamp_dt'].dt.date.astype(str)
+            )
         else:
-            combined_df['date_key'] = combined_df['scrape_timestamp_dt'].dt.date
+            combined_df['date_key'] = combined_df['scrape_timestamp_dt'].dt.date.astype(str)
+        
+        # Add date_key to deduplication columns
+        if 'region_code' in combined_df.columns or 'url' in combined_df.columns:
+            dedup_subset = [col for col in dedup_columns if col != 'scrape_timestamp_dt'] + ['date_key']
+        else:
+            # If no region identifier, use more strict deduplication
+            dedup_subset = ['date_key', 'scrape_timestamp_dt']
         
         # Sort by timestamp (most recent first) then drop duplicates
         combined_df = combined_df.sort_values('scrape_timestamp_dt', ascending=False)
-        combined_df = combined_df.drop_duplicates(
-            subset=['region_code', 'date_key'], 
-            keep='first'
-        )
+        
+        # Remove exact duplicates first (all columns identical except timestamp)
+        data_columns = [col for col in combined_df.columns if col not in ['scrape_timestamp', 'scrape_timestamp_dt', 'date_key']]
+        if len(data_columns) > 0:
+            combined_df = combined_df.drop_duplicates(subset=data_columns, keep='first')
+        
+        # Then remove duplicates by region and date (keep most recent)
+        combined_df = combined_df.drop_duplicates(subset=dedup_subset, keep='first')
         
         # Remove helper columns
         combined_df = combined_df.drop(['scrape_timestamp_dt', 'date_key'], axis=1)
+        
+        logging.info(f"After deduplication: {len(combined_df)} unique records remaining")
     
     # Save to Parquet with compression
     combined_df.to_parquet(filename, compression='snappy', index=False)
