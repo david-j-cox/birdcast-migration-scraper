@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-BirdCast Data Scraper
-Scrapes migration data from the BirdCast dashboard for Duval County, Florida, and BOulder County, Colorado
+Atlantic Flyway BirdCast Data Scraper
+Scrapes migration data from the BirdCast dashboard for all counties along the Atlantic Flyway corridor
 """
 
 import requests
@@ -9,6 +9,7 @@ from bs4 import BeautifulSoup
 import json
 import csv
 import os
+import pandas as pd
 from datetime import datetime, timezone
 import re
 import time
@@ -22,24 +23,39 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('birdcast_scraper.log'),
+        logging.FileHandler('../logs/atlantic_flyway_scraper.log'),
         logging.StreamHandler()
     ]
 )
 
-class BirdCastScraper:
+class AtlanticFlywayBirdCastScraper:
     def __init__(self, urls=None):
-        # Default regions: Duval County, FL and Boulder County, CO
         if urls is None:
-            urls = [
-                "https://dashboard.birdcast.info/region/US-FL-031",  # Duval County, Florida
-                "https://dashboard.birdcast.info/region/US-CO-013"   # Boulder County, Colorado
-            ]
+            # Load URLs from the Atlantic Flyway corridor analysis
+            urls = self.load_flyway_urls()
         self.urls = urls if isinstance(urls, list) else [urls]
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         })
+        logging.info(f"Initialized scraper with {len(self.urls)} Atlantic Flyway counties")
+    
+    def load_flyway_urls(self):
+        """Load BirdCast URLs from the Atlantic Flyway corridor analysis CSV"""
+        csv_file = '../data/atlantic_flyway_corridor_counties_with_urls.csv'
+        if not os.path.exists(csv_file):
+            logging.error(f"Atlantic Flyway CSV file not found: {csv_file}")
+            logging.error("Please run the atlantic_flyway_corridor.py script first to generate the county list")
+            return []
+        
+        try:
+            df = pd.read_csv(csv_file)
+            urls = df['birdcast_url'].tolist()
+            logging.info(f"Loaded {len(urls)} BirdCast URLs from Atlantic Flyway corridor analysis")
+            return urls
+        except Exception as e:
+            logging.error(f"Error loading URLs from {csv_file}: {e}")
+            return []
     
     def parse_datetime_string(self, datetime_str):
         """Parse datetime string from BirdCast into ISO format timestamp"""
@@ -166,7 +182,7 @@ class BirdCastScraper:
             
             # Log what we found
             if len(data) > 2:  # More than just timestamp and URL
-                logging.info(f"Successfully scraped data from {url}: {data}")
+                logging.info(f"Successfully scraped data from {url}: found {len(data)-2} data fields")
             else:
                 logging.warning(f"No migration data found for {url}")
                 # Save a sample of the content for debugging
@@ -182,44 +198,24 @@ class BirdCastScraper:
             return None
     
     def scrape_data(self):
-        """Scrape migration data from all configured BirdCast dashboard URLs"""
+        """Scrape migration data from all Atlantic Flyway counties"""
         all_data = []
         
-        for url in self.urls:
+        logging.info(f"Starting to scrape {len(self.urls)} Atlantic Flyway counties...")
+        
+        for i, url in enumerate(self.urls, 1):
+            logging.info(f"Progress: {i}/{len(self.urls)} counties")
             data = self.scrape_single_url(url)
             if data:
                 all_data.append(data)
+            
+            # Add a small delay to be respectful to the server
+            time.sleep(0.5)
         
+        logging.info(f"Completed scraping. Successfully collected data from {len(all_data)} counties")
         return all_data
     
-    def save_to_csv(self, data_list, filename='birdcast_data.csv'):
-        """Save data to CSV file"""
-        if not data_list:
-            return
-        
-        # Handle both single data dict and list of data dicts
-        if isinstance(data_list, dict):
-            data_list = [data_list]
-            
-        file_exists = os.path.isfile(filename)
-        
-        # Get all unique fieldnames from all records
-        all_fieldnames = set()
-        for data in data_list:
-            all_fieldnames.update(data.keys())
-        
-        with open(filename, 'a', newline='', encoding='utf-8') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=sorted(all_fieldnames))
-            
-            if not file_exists:
-                writer.writeheader()
-            
-            for data in data_list:
-                writer.writerow(data)
-        
-        logging.info(f"Data for {len(data_list)} region(s) saved to {filename}")
-    
-    def save_to_json(self, data_list, filename='birdcast_data.json'):
+    def save_to_json(self, data_list, filename='../data/atlantic_flyway_corridor.json'):
         """Save data to JSON file (append to list)"""
         if not data_list:
             return
@@ -242,64 +238,60 @@ class BirdCastScraper:
         with open(filename, 'w', encoding='utf-8') as f:
             json.dump(existing_data, f, indent=2, ensure_ascii=False)
         
-        logging.info(f"Data for {len(data_list)} region(s) saved to {filename}")
+        logging.info(f"Data for {len(data_list)} Atlantic Flyway counties saved to {filename}")
 
-def run_scraper():
-    """Run the scraper and save data"""
-    scraper = BirdCastScraper()
+def run_flyway_scraper():
+    """Run the Atlantic Flyway scraper and save data"""
+    scraper = AtlanticFlywayBirdCastScraper()
     data = scraper.scrape_data()
     
     if data:
-        # Save to both CSV and JSON
-        scraper.save_to_csv(data)
+        # Save to JSON
         scraper.save_to_json(data)
         
-        # Print summary for email notification
-        print("BirdCast Data Scraper - SUCCESS")
-        print("=" * 50)
-        print(f"Scraped data for {len(data)} regions at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        # Print summary
+        print("Atlantic Flyway BirdCast Data Scraper - SUCCESS")
+        print("=" * 60)
+        print(f"Scraped data for {len(data)} counties at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        # Count by state
+        state_counts = {}
+        total_birds_by_state = {}
         
         for region_data in data:
             region_name = region_data.get('region_name', 'Unknown Region')
-            total_birds = region_data.get('total_birds', 'N/A')
-            peak_birds = region_data.get('peak_birds_in_flight', 'N/A')
-            direction = region_data.get('flight_direction', 'N/A')
+            total_birds = region_data.get('total_birds', 0)
             
-            print(f"\n{region_name}:")
-            print(f"   Total birds: {total_birds:,}" if isinstance(total_birds, int) else f"   Total birds: {total_birds}")
-            print(f"   Peak in flight: {peak_birds:,}" if isinstance(peak_birds, int) else f"   Peak in flight: {peak_birds}")
-            print(f"   Direction: {direction}")
+            # Extract state from region name
+            if ',' in region_name:
+                state = region_name.split(',')[-1].strip()
+                state_counts[state] = state_counts.get(state, 0) + 1
+                if isinstance(total_birds, int):
+                    total_birds_by_state[state] = total_birds_by_state.get(state, 0) + total_birds
         
-        print(f"\nData saved to: birdcast_data.csv & birdcast_data.json")
-        print("=" * 50)
+        print(f"\nCounties scraped by state:")
+        for state, count in sorted(state_counts.items()):
+            total_birds = total_birds_by_state.get(state, 0)
+            print(f"   {state}: {count} counties, {total_birds:,} total birds")
         
-        logging.info("Scraping completed successfully")
+        print(f"\nData saved to: atlantic_flyway_corridor.json")
+        print("=" * 60)
+        
+        logging.info("Atlantic Flyway scraping completed successfully")
     else:
-        print("BirdCast Data Scraper - FAILED")
+        print("Atlantic Flyway BirdCast Data Scraper - FAILED")
         print("No data was collected. Check the logs for details.")
-        logging.error("Scraping failed")
-
-def schedule_daily_scraping():
-    """Schedule the scraper to run daily at 12:00 PM (noon)"""
-    schedule.every().day.at("12:00").do(run_scraper)
-    logging.info("Scheduler started - will run daily at 12:00 PM (noon)")
-    
-    while True:
-        schedule.run_pending()
-        time.sleep(60)  # Check every minute
+        logging.error("Atlantic Flyway scraping failed")
 
 if __name__ == "__main__":
     import sys
     
-    if len(sys.argv) > 1 and sys.argv[1] == "--schedule":
-        # Run in scheduled mode
-        schedule_daily_scraping()
-    elif len(sys.argv) > 1 and sys.argv[1] == "--test":
+    if len(sys.argv) > 1 and sys.argv[1] == "--test":
         # Run once for testing
-        logging.info("Running test scrape...")
-        run_scraper()
+        logging.info("Running test scrape of Atlantic Flyway counties...")
+        run_flyway_scraper()
     else:
-        print("BirdCast Data Scraper")
+        print("Atlantic Flyway BirdCast Data Scraper")
         print("Usage:")
-        print("  python birdcast_scraper.py --test      # Run once for testing")
-        print("  python birdcast_scraper.py --schedule  # Run daily at 12:00 PM (noon)")
+        print("  python atlantic_flyway_scraper.py --test      # Run once for testing")
+        print("  # Note: This scraper is designed for manual runs due to the large number of counties")
