@@ -255,11 +255,21 @@ def save_to_parquet(data_list, filename):
     for col in new_df.columns:
         if col in ['total_birds', 'peak_birds_in_flight', 'flight_speed_mph', 'flight_altitude_ft']:
             new_df[col] = pd.to_numeric(new_df[col], errors='coerce').astype('Int64')
+        elif col in ['migration_start_utc', 'migration_end_utc', 'scrape_timestamp']:
+            # Convert datetime strings to proper datetime objects
+            new_df[col] = pd.to_datetime(new_df[col], errors='coerce', utc=True)
     
     # Load existing data if file exists
     if os.path.isfile(filename):
         try:
             existing_df = pd.read_parquet(filename)
+            
+            # Ensure datetime columns in existing data are properly typed
+            for col in existing_df.columns:
+                if col in ['migration_start_utc', 'migration_end_utc', 'scrape_timestamp']:
+                    if existing_df[col].dtype == 'object':
+                        existing_df[col] = pd.to_datetime(existing_df[col], errors='coerce', utc=True)
+            
             # Combine with new data
             combined_df = pd.concat([existing_df, new_df], ignore_index=True)
         except Exception as e:
@@ -270,8 +280,8 @@ def save_to_parquet(data_list, filename):
     
     # Remove duplicates - keep most recent entry per region per day
     if len(combined_df) > 0 and 'scrape_timestamp' in combined_df.columns:
-        # Convert scrape_timestamp to datetime for proper sorting
-        combined_df['scrape_timestamp_dt'] = pd.to_datetime(combined_df['scrape_timestamp'])
+        # Use scrape_timestamp directly since it's already a datetime object
+        combined_df['scrape_timestamp_dt'] = combined_df['scrape_timestamp']
         
         # Create comprehensive deduplication key
         dedup_columns = ['scrape_timestamp_dt']
