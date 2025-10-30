@@ -121,10 +121,22 @@ def scrape_single_url(session, url):
         
         soup = BeautifulSoup(html_content, 'html.parser')
         
-        # Extract data
+        # Extract data - initialize with all expected fields
         data = {
             'scrape_timestamp': datetime.now(timezone.utc).isoformat(),
-            'url': url
+            'url': url,
+            'region_code': None,
+            'region_name': None,
+            'total_birds': None,
+            'peak_birds_in_flight': None,
+            'flight_direction': None,
+            'flight_speed_mph': None,
+            'flight_altitude_ft': None,
+            'migration_start_raw': None,
+            'migration_start_utc': None,
+            'migration_end_raw': None,
+            'migration_end_utc': None,
+            'migration_date': None
         }
         
         # Extract region name from URL and page content
@@ -147,8 +159,15 @@ def scrape_single_url(session, url):
             except ValueError:
                 logging.warning(f"Could not parse total birds: {total_birds_str}")
         
-        # Try to find "Peak of xxx birds in flight" pattern
+        # Try to find "Peak of xxx birds in flight" pattern (old format)
         peak_birds_match = re.search(r'Peak of (\d{1,3}(?:,?\d{3})*) birds in flight', text_content, re.IGNORECASE)
+        if not peak_birds_match:
+            # Try new format: "PEAK MIGRATION TRAFFIC: 134,500 Birds in flight"
+            peak_birds_match = re.search(r'PEAK MIGRATION TRAFFIC:\s*(\d{1,3}(?:,?\d{3})*)\s*Birds in flight', text_content, re.IGNORECASE)
+        if not peak_birds_match:
+            # Try alternative format: "134,500 Birds in flight (est.)"
+            peak_birds_match = re.search(r'(\d{1,3}(?:,?\d{3})*)\s*Birds in flight \(est\.\)', text_content, re.IGNORECASE)
+        
         if peak_birds_match:
             peak_birds_str = peak_birds_match.group(1).replace(',', '')
             try:
@@ -156,21 +175,30 @@ def scrape_single_url(session, url):
             except ValueError:
                 logging.warning(f"Could not parse peak birds: {peak_birds_str}")
         
-        # Try to find flight direction
-        direction_match = re.search(r'flying ([A-Z]{1,3})', text_content)
+        # Try to find flight direction - multiple patterns
+        direction_match = re.search(r'flying ([A-Z]{1,3})', text_content)  # Old format
+        if not direction_match:
+            direction_match = re.search(r'Direction:\s*([A-Z]{1,3})', text_content)  # New format
+        
         if direction_match:
             data['flight_direction'] = direction_match.group(1)
         
-        # Try to find flight speed
-        speed_match = re.search(r'at (\d+) mph', text_content)
+        # Try to find flight speed - multiple patterns
+        speed_match = re.search(r'at (\d+) mph', text_content)  # Old format
+        if not speed_match:
+            speed_match = re.search(r'Speed:\s*(\d+)\s*mph', text_content)  # New format
+        
         if speed_match:
             try:
                 data['flight_speed_mph'] = int(speed_match.group(1))
             except ValueError:
                 logging.warning(f"Could not parse flight speed: {speed_match.group(1)}")
         
-        # Try to find flight altitude
-        altitude_match = re.search(r'at (\d{1,3}(?:,?\d{3})*) feet', text_content)
+        # Try to find flight altitude - multiple patterns
+        altitude_match = re.search(r'at (\d{1,3}(?:,?\d{3})*) feet', text_content)  # Old format
+        if not altitude_match:
+            altitude_match = re.search(r'Altitude:\s*(\d{1,3}(?:,?\d{3})*)\s*ft?', text_content)  # New format
+        
         if altitude_match:
             altitude_str = altitude_match.group(1).replace(',', '')
             try:
@@ -377,13 +405,41 @@ def save_to_csv(data_list, filename):
         
     file_exists = os.path.isfile(filename)
     
+    # Define consistent column order for BirdCast data
+    expected_fieldnames = [
+        'scrape_timestamp',
+        'url', 
+        'region_code',
+        'region_name',
+        'total_birds',
+        'peak_birds_in_flight',
+        'flight_direction',
+        'flight_speed_mph',
+        'flight_altitude_ft',
+        'migration_start_raw',
+        'migration_start_utc',
+        'migration_end_raw',
+        'migration_end_utc',
+        'migration_date'
+    ]
+    
     # Get all unique fieldnames from all records
     all_fieldnames = set()
     for data in data_list:
         all_fieldnames.update(data.keys())
     
+    # Use expected order for known fields, append any unexpected fields at the end
+    ordered_fieldnames = []
+    for field in expected_fieldnames:
+        if field in all_fieldnames:
+            ordered_fieldnames.append(field)
+            all_fieldnames.remove(field)
+    
+    # Add any remaining fields that weren't in the expected list
+    ordered_fieldnames.extend(sorted(all_fieldnames))
+    
     with open(filename, 'a', newline='', encoding='utf-8') as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=sorted(all_fieldnames))
+        writer = csv.DictWriter(csvfile, fieldnames=ordered_fieldnames)
         
         if not file_exists:
             writer.writeheader()
